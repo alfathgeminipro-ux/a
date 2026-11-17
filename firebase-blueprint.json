@@ -1,0 +1,310 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "Authenticated user profile and selected role in KelasKu.",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "Owner Firebase Auth UID."
+        },
+        "displayName": {
+          "type": "string",
+          "description": "Full display name."
+        },
+        "email": {
+          "type": "string",
+          "description": "Account email address."
+        },
+        "avatarUrl": {
+          "type": "string",
+          "description": "Optional profile photo URL."
+        },
+        "role": {
+          "type": "string",
+          "enum": ["student", "teacher"],
+          "description": "Active KelasKu role (student or teacher)."
+        },
+        "notificationsEnabled": {
+          "type": "boolean",
+          "description": "Whether class reminders are enabled."
+        },
+        "seeded": {
+          "type": "boolean",
+          "description": "Whether initial sample class data has been seeded."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when created (client writes FieldValue.serverTimestamp())."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when last updated (client writes FieldValue.serverTimestamp())."
+        }
+      },
+      "required": ["userId", "displayName", "email", "role", "notificationsEnabled", "seeded", "createdAt", "updatedAt"]
+    },
+    "Assignment": {
+      "title": "Assignment",
+      "description": "Class assignment or homework item.",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "Owner Firebase Auth UID."
+        },
+        "title": {
+          "type": "string",
+          "description": "Assignment title."
+        },
+        "course": {
+          "type": "string",
+          "description": "Subject or course name."
+        },
+        "description": {
+          "type": "string",
+          "description": "Detailed assignment instructions."
+        },
+        "dueDateIso": {
+          "type": "string",
+          "description": "Due date ISO string (YYYY-MM-DD)."
+        },
+        "status": {
+          "type": "string",
+          "enum": ["pending", "submitted", "completed", "graded"],
+          "description": "Assignment completion or grading state."
+        },
+        "progress": {
+          "type": "integer",
+          "description": "Progress percentage from 0 to 100."
+        },
+        "teacherName": {
+          "type": "string",
+          "description": "Name of assigning teacher/lecturer."
+        },
+        "attachments": {
+          "type": "array",
+          "description": "Up to 5 attachment filenames."
+        },
+        "submissionNote": {
+          "type": "string",
+          "description": "Optional student submission note or teacher feedback."
+        },
+        "gradeScore": {
+          "type": "integer",
+          "description": "Optional grade score 0 to 100."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when created."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when updated."
+        }
+      },
+      "required": ["userId", "title", "course", "description", "dueDateIso", "status", "progress", "teacherName", "attachments", "createdAt", "updatedAt"]
+    },
+    "CalendarEvent": {
+      "title": "CalendarEvent",
+      "description": "Academic calendar event or class schedule item.",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "Owner Firebase Auth UID."
+        },
+        "title": {
+          "type": "string",
+          "description": "Event title."
+        },
+        "dateIso": {
+          "type": "string",
+          "description": "Date ISO string (YYYY-MM-DD)."
+        },
+        "timeLabel": {
+          "type": "string",
+          "description": "Human-readable time label (e.g., 08:30 WIB)."
+        },
+        "colorTag": {
+          "type": "string",
+          "enum": ["orange", "blue", "green"],
+          "description": "Calendar dot color tag."
+        },
+        "reminderMinutes": {
+          "type": "integer",
+          "description": "Reminder lead time in minutes."
+        },
+        "category": {
+          "type": "string",
+          "description": "Event category label."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when created."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when updated."
+        }
+      },
+      "required": ["userId", "title", "dateIso", "timeLabel", "colorTag", "reminderMinutes", "category", "createdAt", "updatedAt"]
+    },
+    "MaterialItem": {
+      "title": "MaterialItem",
+      "description": "Learning material (PDF, video, or link).",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "Owner Firebase Auth UID."
+        },
+        "title": {
+          "type": "string",
+          "description": "Material title."
+        },
+        "course": {
+          "type": "string",
+          "description": "Course name."
+        },
+        "type": {
+          "type": "string",
+          "enum": ["pdf", "video", "link"],
+          "description": "Resource type."
+        },
+        "readProgress": {
+          "type": "integer",
+          "description": "Reading/watching progress 0 to 100."
+        },
+        "summary": {
+          "type": "string",
+          "description": "Brief summary of material contents."
+        },
+        "downloaded": {
+          "type": "boolean",
+          "description": "Whether marked as downloaded offline."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when created."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when updated."
+        }
+      },
+      "required": ["userId", "title", "course", "type", "readProgress", "summary", "downloaded", "createdAt", "updatedAt"]
+    },
+    "Conversation": {
+      "title": "Conversation",
+      "description": "Class communication thread or announcement channel.",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "Owner Firebase Auth UID."
+        },
+        "title": {
+          "type": "string",
+          "description": "Conversation or announcement title."
+        },
+        "subtitle": {
+          "type": "string",
+          "description": "Channel subtitle or participant."
+        },
+        "iconType": {
+          "type": "string",
+          "description": "Icon identifier (announcement, group, teacher, direct)."
+        },
+        "unreadCount": {
+          "type": "integer",
+          "description": "Unread message counter."
+        },
+        "lastMessage": {
+          "type": "string",
+          "description": "Latest message preview."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when created."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when updated."
+        }
+      },
+      "required": ["userId", "title", "subtitle", "iconType", "unreadCount", "lastMessage", "createdAt", "updatedAt"]
+    },
+    "ChatMessage": {
+      "title": "ChatMessage",
+      "description": "Individual message inside a conversation thread.",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "Owner Firebase Auth UID."
+        },
+        "sender": {
+          "type": "string",
+          "enum": ["me", "other"],
+          "description": "Sender alignment."
+        },
+        "senderName": {
+          "type": "string",
+          "description": "Display name of sender."
+        },
+        "text": {
+          "type": "string",
+          "description": "Message body text."
+        },
+        "timeLabel": {
+          "type": "string",
+          "description": "Short time label (e.g., 09:15)."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when sent."
+        }
+      },
+      "required": ["userId", "sender", "senderName", "text", "timeLabel", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/UserProfile" },
+      "description": "Authenticated user profile and active role preference."
+    },
+    "/users/{userId}/assignments/{assignmentId}": {
+      "schema": { "$ref": "#/entities/Assignment" },
+      "description": "User-scoped class assignments."
+    },
+    "/users/{userId}/events/{eventId}": {
+      "schema": { "$ref": "#/entities/CalendarEvent" },
+      "description": "User-scoped academic calendar events."
+    },
+    "/users/{userId}/materials/{materialId}": {
+      "schema": { "$ref": "#/entities/MaterialItem" },
+      "description": "User-scoped class learning materials."
+    },
+    "/users/{userId}/conversations/{conversationId}": {
+      "schema": { "$ref": "#/entities/Conversation" },
+      "description": "User-scoped class announcement and chat threads."
+    },
+    "/users/{userId}/conversations/{conversationId}/messages/{messageId}": {
+      "schema": { "$ref": "#/entities/ChatMessage" },
+      "description": "Messages belonging to a conversation thread."
+    }
+  }
+}

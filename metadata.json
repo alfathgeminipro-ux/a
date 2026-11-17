@@ -1,0 +1,6 @@
+{
+  "name": "KelasKu",
+  "description": "Aplikasi manajemen kelas bergaya glassmorphism dengan kalender, tugas, komunikasi, materi, serta dukungan peran siswa dan pengajar.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

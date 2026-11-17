@@ -1,0 +1,245 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Global safety net: default deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- GLOBAL HELPERS ---
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isValidTimestamp(ts) {
+      return ts is timestamp && ts <= request.time;
+    }
+
+    // --- VALIDATION HELPERS ---
+    function isValidUserProfile(data) {
+      return data.userId is string && data.userId.size() >= 1 && data.userId.size() <= 128 &&
+             data.displayName is string && data.displayName.size() >= 1 && data.displayName.size() <= 80 &&
+             data.email is string && data.email.size() >= 3 && data.email.size() <= 150 &&
+             data.role in ['student', 'teacher'] &&
+             data.notificationsEnabled is bool &&
+             data.seeded is bool &&
+             (!('avatarUrl' in data) || (data.avatarUrl is string && data.avatarUrl.size() <= 500));
+    }
+
+    function isValidAssignment(data) {
+      return data.userId is string && data.userId.size() >= 1 && data.userId.size() <= 128 &&
+             data.title is string && data.title.size() >= 1 && data.title.size() <= 120 &&
+             data.course is string && data.course.size() >= 1 && data.course.size() <= 80 &&
+             data.description is string && data.description.size() <= 1000 &&
+             data.dueDateIso is string && data.dueDateIso.size() >= 10 && data.dueDateIso.size() <= 30 &&
+             data.status in ['pending', 'submitted', 'completed', 'graded'] &&
+             data.progress is int && data.progress >= 0 && data.progress <= 100 &&
+             data.teacherName is string && data.teacherName.size() >= 1 && data.teacherName.size() <= 80 &&
+             data.attachments is list && data.attachments.size() <= 5 &&
+             (data.attachments.size() == 0 || data.attachments[0] is string) &&
+             (!('submissionNote' in data) || (data.submissionNote is string && data.submissionNote.size() <= 500)) &&
+             (!('gradeScore' in data) || (data.gradeScore is int && data.gradeScore >= 0 && data.gradeScore <= 100));
+    }
+
+    function isValidCalendarEvent(data) {
+      return data.userId is string && data.userId.size() >= 1 && data.userId.size() <= 128 &&
+             data.title is string && data.title.size() >= 1 && data.title.size() <= 120 &&
+             data.dateIso is string && data.dateIso.size() >= 10 && data.dateIso.size() <= 30 &&
+             data.timeLabel is string && data.timeLabel.size() >= 1 && data.timeLabel.size() <= 40 &&
+             data.colorTag in ['orange', 'blue', 'green'] &&
+             data.reminderMinutes is int && data.reminderMinutes >= 0 && data.reminderMinutes <= 1440 &&
+             data.category is string && data.category.size() >= 1 && data.category.size() <= 40;
+    }
+
+    function isValidMaterialItem(data) {
+      return data.userId is string && data.userId.size() >= 1 && data.userId.size() <= 128 &&
+             data.title is string && data.title.size() >= 1 && data.title.size() <= 120 &&
+             data.course is string && data.course.size() >= 1 && data.course.size() <= 80 &&
+             data.type in ['pdf', 'video', 'link'] &&
+             data.readProgress is int && data.readProgress >= 0 && data.readProgress <= 100 &&
+             data.summary is string && data.summary.size() <= 1000 &&
+             data.downloaded is bool;
+    }
+
+    function isValidConversation(data) {
+      return data.userId is string && data.userId.size() >= 1 && data.userId.size() <= 128 &&
+             data.title is string && data.title.size() >= 1 && data.title.size() <= 100 &&
+             data.subtitle is string && data.subtitle.size() >= 1 && data.subtitle.size() <= 100 &&
+             data.iconType is string && data.iconType.size() >= 1 && data.iconType.size() <= 30 &&
+             data.unreadCount is int && data.unreadCount >= 0 && data.unreadCount <= 999 &&
+             data.lastMessage is string && data.lastMessage.size() <= 300;
+    }
+
+    function isValidChatMessage(data) {
+      return data.userId is string && data.userId.size() >= 1 && data.userId.size() <= 128 &&
+             data.sender in ['me', 'other'] &&
+             data.senderName is string && data.senderName.size() >= 1 && data.senderName.size() <= 80 &&
+             data.text is string && data.text.size() >= 1 && data.text.size() <= 1000 &&
+             data.timeLabel is string && data.timeLabel.size() >= 1 && data.timeLabel.size() <= 30;
+    }
+
+    // --- USER PROFILE ---
+    match /users/{userId} {
+      allow get: if isOwner(userId) && isValidId(userId);
+      allow list: if false;
+
+      allow create: if isOwner(userId) &&
+                       isValidId(userId) &&
+                       incoming().userId == userId &&
+                       incoming().keys().hasAll(['userId', 'displayName', 'email', 'role', 'notificationsEnabled', 'seeded', 'createdAt', 'updatedAt']) &&
+                       incoming().keys().hasOnly(['userId', 'displayName', 'email', 'avatarUrl', 'role', 'notificationsEnabled', 'seeded', 'createdAt', 'updatedAt']) &&
+                       isValidTimestamp(incoming().createdAt) &&
+                       isValidTimestamp(incoming().updatedAt) &&
+                       isValidUserProfile(incoming());
+
+      allow update: if isOwner(userId) &&
+                       isValidId(userId) &&
+                       isValidUserProfile(incoming()) &&
+                       incoming().userId == existing().userId &&
+                       incoming().createdAt == existing().createdAt &&
+                       isValidTimestamp(incoming().updatedAt) &&
+                       incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'avatarUrl', 'role', 'notificationsEnabled', 'seeded', 'updatedAt']);
+
+      allow delete: if isOwner(userId) && isValidId(userId);
+
+      // --- ASSIGNMENTS ---
+      match /assignments/{assignmentId} {
+        allow get: if isOwner(userId) && isValidId(assignmentId);
+        allow list: if isOwner(userId);
+
+        allow create: if isOwner(userId) &&
+                         isValidId(assignmentId) &&
+                         incoming().userId == userId &&
+                         incoming().keys().hasAll(['userId', 'title', 'course', 'description', 'dueDateIso', 'status', 'progress', 'teacherName', 'attachments', 'createdAt', 'updatedAt']) &&
+                         incoming().keys().hasOnly(['userId', 'title', 'course', 'description', 'dueDateIso', 'status', 'progress', 'teacherName', 'attachments', 'submissionNote', 'gradeScore', 'createdAt', 'updatedAt']) &&
+                         isValidTimestamp(incoming().createdAt) &&
+                         isValidTimestamp(incoming().updatedAt) &&
+                         isValidAssignment(incoming());
+
+        allow update: if isOwner(userId) &&
+                         isValidId(assignmentId) &&
+                         isValidAssignment(incoming()) &&
+                         incoming().userId == existing().userId &&
+                         incoming().createdAt == existing().createdAt &&
+                         isValidTimestamp(incoming().updatedAt) &&
+                         (
+                           // Action 1: Submit scanned PDF/attachments or toggle completion
+                           (incoming().diff(existing()).affectedKeys().hasOnly(['status', 'progress', 'submissionNote', 'attachments', 'updatedAt'])) ||
+                           // Action 2: Teacher edit or grade assignment
+                           (incoming().diff(existing()).affectedKeys().hasOnly(['title', 'course', 'description', 'dueDateIso', 'status', 'progress', 'gradeScore', 'submissionNote', 'attachments', 'updatedAt']))
+                         );
+
+        allow delete: if isOwner(userId) && isValidId(assignmentId);
+      }
+
+      // --- CALENDAR EVENTS ---
+      match /events/{eventId} {
+        allow get: if isOwner(userId) && isValidId(eventId);
+        allow list: if isOwner(userId);
+
+        allow create: if isOwner(userId) &&
+                         isValidId(eventId) &&
+                         incoming().userId == userId &&
+                         incoming().keys().hasAll(['userId', 'title', 'dateIso', 'timeLabel', 'colorTag', 'reminderMinutes', 'category', 'createdAt', 'updatedAt']) &&
+                         incoming().keys().hasOnly(['userId', 'title', 'dateIso', 'timeLabel', 'colorTag', 'reminderMinutes', 'category', 'createdAt', 'updatedAt']) &&
+                         isValidTimestamp(incoming().createdAt) &&
+                         isValidTimestamp(incoming().updatedAt) &&
+                         isValidCalendarEvent(incoming());
+
+        allow update: if isOwner(userId) &&
+                         isValidId(eventId) &&
+                         isValidCalendarEvent(incoming()) &&
+                         incoming().userId == existing().userId &&
+                         incoming().createdAt == existing().createdAt &&
+                         isValidTimestamp(incoming().updatedAt) &&
+                         incoming().diff(existing()).affectedKeys().hasOnly(['title', 'dateIso', 'timeLabel', 'colorTag', 'reminderMinutes', 'category', 'updatedAt']);
+
+        allow delete: if isOwner(userId) && isValidId(eventId);
+      }
+
+      // --- LEARNING MATERIALS ---
+      match /materials/{materialId} {
+        allow get: if isOwner(userId) && isValidId(materialId);
+        allow list: if isOwner(userId);
+
+        allow create: if isOwner(userId) &&
+                         isValidId(materialId) &&
+                         incoming().userId == userId &&
+                         incoming().keys().hasAll(['userId', 'title', 'course', 'type', 'readProgress', 'summary', 'downloaded', 'createdAt', 'updatedAt']) &&
+                         incoming().keys().hasOnly(['userId', 'title', 'course', 'type', 'readProgress', 'summary', 'downloaded', 'createdAt', 'updatedAt']) &&
+                         isValidTimestamp(incoming().createdAt) &&
+                         isValidTimestamp(incoming().updatedAt) &&
+                         isValidMaterialItem(incoming());
+
+        allow update: if isOwner(userId) &&
+                         isValidId(materialId) &&
+                         isValidMaterialItem(incoming()) &&
+                         incoming().userId == existing().userId &&
+                         incoming().createdAt == existing().createdAt &&
+                         isValidTimestamp(incoming().updatedAt) &&
+                         incoming().diff(existing()).affectedKeys().hasOnly(['readProgress', 'downloaded', 'updatedAt']);
+
+        allow delete: if isOwner(userId) && isValidId(materialId);
+      }
+
+      // --- CONVERSATIONS & MESSAGES ---
+      match /conversations/{conversationId} {
+        allow get: if isOwner(userId) && isValidId(conversationId);
+        allow list: if isOwner(userId);
+
+        allow create: if isOwner(userId) &&
+                         isValidId(conversationId) &&
+                         incoming().userId == userId &&
+                         incoming().keys().hasAll(['userId', 'title', 'subtitle', 'iconType', 'unreadCount', 'lastMessage', 'createdAt', 'updatedAt']) &&
+                         incoming().keys().hasOnly(['userId', 'title', 'subtitle', 'iconType', 'unreadCount', 'lastMessage', 'createdAt', 'updatedAt']) &&
+                         isValidTimestamp(incoming().createdAt) &&
+                         isValidTimestamp(incoming().updatedAt) &&
+                         isValidConversation(incoming());
+
+        allow update: if isOwner(userId) &&
+                         isValidId(conversationId) &&
+                         isValidConversation(incoming()) &&
+                         incoming().userId == existing().userId &&
+                         incoming().createdAt == existing().createdAt &&
+                         isValidTimestamp(incoming().updatedAt) &&
+                         incoming().diff(existing()).affectedKeys().hasOnly(['unreadCount', 'lastMessage', 'updatedAt']);
+
+        allow delete: if isOwner(userId) && isValidId(conversationId);
+
+        match /messages/{messageId} {
+          allow get: if isOwner(userId) && isValidId(conversationId) && isValidId(messageId);
+          allow list: if isOwner(userId) && isValidId(conversationId);
+
+          allow create: if isOwner(userId) &&
+                           isValidId(conversationId) &&
+                           isValidId(messageId) &&
+                           incoming().userId == userId &&
+                           incoming().keys().hasAll(['userId', 'sender', 'senderName', 'text', 'timeLabel', 'createdAt']) &&
+                           incoming().keys().hasOnly(['userId', 'sender', 'senderName', 'text', 'timeLabel', 'createdAt']) &&
+                           isValidTimestamp(incoming().createdAt) &&
+                           isValidChatMessage(incoming()) &&
+                           exists(/databases/$(database)/documents/users/$(userId)/conversations/$(conversationId));
+
+          allow update: if false;
+          allow delete: if isOwner(userId) && isValidId(conversationId) && isValidId(messageId);
+        }
+      }
+    }
+  }
+}
