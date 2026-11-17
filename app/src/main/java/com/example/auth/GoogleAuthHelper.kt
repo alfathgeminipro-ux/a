@@ -15,8 +15,10 @@ import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
 import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential.Companion.TYPE_GOOGLE_ID_TOKEN_CREDENTIAL
 import com.google.firebase.Firebase
 import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.auth.FirebaseAuthException
 import com.google.firebase.auth.FirebaseUser
 import com.google.firebase.auth.GoogleAuthProvider
+import com.google.firebase.auth.OAuthProvider
 import com.google.firebase.auth.auth
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -29,6 +31,10 @@ import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
 
 private const val TAG = "Auth"
+
+fun resolveUserProvider(user: FirebaseUser): String {
+    return if (user.providerData.any { it.providerId == "apple.com" }) "apple" else "google"
+}
 
 fun FirebaseAuth.authStateFlow(): Flow<FirebaseUser?> = callbackFlow {
     val listener = FirebaseAuth.AuthStateListener { auth ->
@@ -130,6 +136,60 @@ fun onGoogleSignInClicked(
         } catch (e: Exception) {
             Log.e(TAG, "Google Sign-In failed", e)
             onAuthError(e.localizedMessage ?: "Login Google gagal.")
+        }
+    }
+}
+
+fun onAppleSignInClicked(
+    context: Context,
+    onAuthSuccess: (FirebaseUser) -> Unit,
+    onAuthError: (String) -> Unit,
+    scope: CoroutineScope,
+    onAuthCancelled: () -> Unit = {},
+) {
+    val activity = context as? Activity
+    if (activity == null) {
+        onAuthError("Activity tidak tersedia untuk login Apple.")
+        return
+    }
+    scope.launch {
+        try {
+            val pendingTask = Firebase.auth.pendingAuthResult
+            val result = if (pendingTask != null) {
+                pendingTask.await()
+            } else {
+                val provider = OAuthProvider.newBuilder("apple.com")
+                    .setScopes(listOf("email", "name"))
+                    .addCustomParameter("locale", "id")
+                    .build()
+                Firebase.auth.startActivityForSignInWithProvider(activity, provider).await()
+            }
+            val user = result.user
+            if (user != null) {
+                onAuthSuccess(user)
+            } else {
+                onAuthError("Gagal memuat data akun Apple.")
+            }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: FirebaseAuthException) {
+            Log.e(TAG, "Apple Sign-In FirebaseAuthException: ${e.errorCode}", e)
+            when (e.errorCode) {
+                "ERROR_WEB_CONTEXT_CANCELED",
+                "ERROR_USER_CANCELLED" -> onAuthCancelled()
+                "ERROR_OPERATION_NOT_ALLOWED" -> onAuthError(
+                    "Provider Apple Sign-In belum diaktifkan di Firebase Console (Authentication > Sign-in method > Apple)."
+                )
+                else -> onAuthError(e.localizedMessage ?: "Login Apple gagal.")
+            }
+        } catch (e: Exception) {
+            val msg = e.localizedMessage.orEmpty()
+            if (msg.contains("canceled", ignoreCase = true) || msg.contains("cancelled", ignoreCase = true)) {
+                onAuthCancelled()
+            } else {
+                Log.e(TAG, "Apple Sign-In failed", e)
+                onAuthError(e.localizedMessage ?: "Login Apple gagal.")
+            }
         }
     }
 }

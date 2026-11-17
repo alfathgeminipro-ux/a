@@ -2415,24 +2415,8 @@
               <div class="pw-label" id="pwStrengthLabel">Kekuatan password: -</div>
             </div>
 
-            <div class="otp-section" id="otpSection">
-              <div style="font-size:12px; font-weight:700; color:var(--navy); display:flex; justify-content:space-between; align-items:center;">
-                <span>Masukkan kode OTP 6 digit</span>
-                <button type="button" class="link-btn" id="resendOtpBtn">Kirim ulang</button>
-              </div>
-              <div class="otp-grid" id="otpGrid">
-                <input type="text" inputmode="numeric" maxlength="1" class="otp-box" aria-label="Digit OTP 1" />
-                <input type="text" inputmode="numeric" maxlength="1" class="otp-box" aria-label="Digit OTP 2" />
-                <input type="text" inputmode="numeric" maxlength="1" class="otp-box" aria-label="Digit OTP 3" />
-                <input type="text" inputmode="numeric" maxlength="1" class="otp-box" aria-label="Digit OTP 4" />
-                <input type="text" inputmode="numeric" maxlength="1" class="otp-box" aria-label="Digit OTP 5" />
-                <input type="text" inputmode="numeric" maxlength="1" class="otp-box" aria-label="Digit OTP 6" />
-              </div>
-            </div>
-
-            <div class="login-links stagger-in" style="animation-delay: 0.36s">
+            <div class="login-links stagger-in" style="animation-delay: 0.36s; justify-content: flex-end;">
               <button type="button" class="link-btn" id="forgotPwBtn">Lupa password?</button>
-              <button type="button" class="link-btn" id="toggleOtpModeBtn">Masuk dengan OTP</button>
             </div>
 
             <div class="login-error-box" id="loginErrorBox" role="alert"></div>
@@ -2652,23 +2636,21 @@
 
   <script>
     /* =========================================================================
-       MODUL 1: FIREBASE_CONFIG & KONFIGURASI BACKEND
+       MODUL 1: FIREBASE_CONFIG & KONFIGURASI BACKEND ASLI
        -------------------------------------------------------------------------
-       Cara mengisi untuk versi web mandiri:
-       1. Buka Firebase Console (https://console.firebase.google.com) -> Project Settings.
-       2. Tambahkan Web App (</>) lalu salin object `firebaseConfig` ke bawah ini.
-       3. Aktifkan Sign-In Providers di Authentication: Google, Apple, Email/Password.
-       4. Saat kosong (apiKey: ""), app otomatis berjalan di MODE DEMO lokal
-          (SHA-256 SubtleCrypto + localStorage), dan di Android WebView otomatis
-          terhubung ke Firebase Auth Google Sign-In & Cloud Firestore native!
+       - Di Android WebView: terhubung langsung ke Firebase Auth (Google Sign-In
+         via Credential Manager & Apple Sign-In via OAuthProvider) serta Cloud
+         Firestore native melalui KelasKuBridge.
+       - Di Web Browser mandiri: menggunakan Firebase Web SDK dengan konfigurasi
+         project Firebase di bawah ini (Google, Apple, dan Email/Password).
        ========================================================================= */
     const FIREBASE_CONFIG = {
-      apiKey: "",
-      authDomain: "",
-      projectId: "",
-      storageBucket: "",
-      messagingSenderId: "",
-      appId: ""
+      apiKey: "AIzaSyCr78Uc2QgICzicxJzlDIVHRa8lJIz8MU4",
+      authDomain: "gen-lang-client-0544389816.firebaseapp.com",
+      projectId: "gen-lang-client-0544389816",
+      storageBucket: "gen-lang-client-0544389816.firebasestorage.app",
+      messagingSenderId: "172540569586",
+      appId: "1:172540569586:android:dec486e12d56c306966d6b"
     };
 
     (function () {
@@ -2711,30 +2693,6 @@
         if (parts.length !== 3 || parts.some(Number.isNaN)) return NaN;
         const [hh, mm] = getDueTimeOnly(isoStr).split(":").map(Number);
         return new Date(parts[0], parts[1] - 1, parts[2], hh || 0, mm || 0, 0, 0).getTime();
-      }
-
-      // Pure-JS SHA-256 fallback jika SubtleCrypto tidak tersedia (mis. file:// non-HTTPS)
-      function simpleSha256Fallback(str) {
-        let h1 = 0xdeadbeef, h2 = 0x41c6ce57;
-        for (let i = 0; i < str.length; i++) {
-          const ch = str.charCodeAt(i);
-          h1 = Math.imul(h1 ^ ch, 2654435761);
-          h2 = Math.imul(h2 ^ ch, 1597334677);
-        }
-        h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
-        h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
-        return (4294967296 * (2097151 & h2) + (h1 >>> 0)).toString(16);
-      }
-
-      async function hashPassword(password) {
-        try {
-          if (window.crypto && window.crypto.subtle) {
-            const buf = new TextEncoder().encode(password);
-            const digest = await window.crypto.subtle.digest("SHA-256", buf);
-            return Array.from(new Uint8Array(digest)).map(b => b.toString(16).padStart(2, "0")).join("");
-          }
-        } catch (_) {}
-        return simpleSha256Fallback(password);
       }
 
       function createSeedData() {
@@ -2827,7 +2785,6 @@
       /* =======================================================================
          MODUL 3: STATE APLIKASI & PENYIMPANAN (LOCALSTORAGE + FIRESTORE BRIDGE)
          ======================================================================= */
-      const LS_USERS_KEY = "kelasku_demo_users_v1";
       const LS_SESSION_KEY = "kelasku_active_session_v1";
       const LS_DATA_PREFIX = "kelasku_user_data_v1_";
       const LS_NOTIFIED_REMINDERS_KEY = "kelasku_notified_reminders_v1";
@@ -2846,8 +2803,6 @@
         calMonth: new Date().getMonth(),
         selectedDateIso: toIsoDate(new Date()),
         authMode: "login", // "login" | "register"
-        otpMode: false,
-        generatedOtp: "",
         activeChatId: null,
         isSpeedDialOpen: false,
         pendingAvatarRect: null,
@@ -3027,9 +2982,13 @@
         }
       };
 
-      // Sync helpers ke Android Native Firestore Bridge (aktif hanya bila login Google di Android)
+      function isNativeProvider(provider) {
+        return provider === "google" || provider === "apple";
+      }
+
+      // Sync helpers ke Android Native Firestore Bridge (aktif untuk login Google maupun Apple di Android)
       function syncBridge(method, ...args) {
-        if (isNativeAndroid && state.user?.provider === "google" && window.KelasKuBridge && typeof window.KelasKuBridge[method] === "function") {
+        if (isNativeAndroid && isNativeProvider(state.user?.provider) && window.KelasKuBridge && typeof window.KelasKuBridge[method] === "function") {
           try { window.KelasKuBridge[method](...args); } catch (_) {}
         }
       }
@@ -3137,33 +3096,76 @@
       }
 
       /* =======================================================================
-         MODUL 5: AUTENTIKASI (NATIVE BRIDGE / WEB FIREBASE SDK / MODE DEMO)
+         MODUL 5: AUTENTIKASI ASLI (ANDROID NATIVE BRIDGE & FIREBASE WEB SDK)
          ======================================================================= */
       let webFirebaseAuth = null;
       let webFirebaseMod = null;
+
+      function resolveWebProviderName(fbUser) {
+        const providers = fbUser?.providerData || [];
+        if (providers.some(p => p.providerId === "apple.com")) return "apple";
+        if (providers.some(p => p.providerId === "google.com")) return "google";
+        return "firebase-web";
+      }
 
       async function initOptionalWebFirebase() {
         if (isNativeAndroid || !FIREBASE_CONFIG.apiKey) return;
         try {
           const appMod = await import("https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js");
           const authMod = await import("https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js");
-          const app = appMod.initializeApp(FIREBASE_CONFIG);
+          const existingApps = appMod.getApps ? appMod.getApps() : [];
+          const app = existingApps.length ? existingApps[0] : appMod.initializeApp(FIREBASE_CONFIG);
           webFirebaseAuth = authMod.getAuth(app);
           webFirebaseMod = authMod;
+          try {
+            await authMod.getRedirectResult(webFirebaseAuth);
+          } catch (redirErr) {
+            if (redirErr?.code && redirErr.code !== "auth/null-user") {
+              setLoginError(formatFirebaseAuthError(redirErr, "Akun"));
+            }
+          }
           authMod.onAuthStateChanged(webFirebaseAuth, (fbUser) => {
             if (fbUser && !state.user) {
+              const prov = resolveWebProviderName(fbUser);
+              const triggerBtn = prov === "apple" ? $("#btnApple") : (prov === "google" ? $("#btnGoogle") : $("#btnEmailSubmit"));
               completeLoginFlow({
                 uid: fbUser.uid,
-                displayName: fbUser.displayName || fbUser.email?.split("@")[0] || "Pengguna",
+                displayName: fbUser.displayName || fbUser.email?.split("@")[0] || "Pengguna KelasKu",
                 email: fbUser.email || "",
                 avatarUrl: fbUser.photoURL || "",
-                provider: "firebase-web"
-              }, $("#btnEmailSubmit"), true);
+                provider: prov
+              }, triggerBtn, true);
             }
           });
         } catch (err) {
-          console.warn("Firebase Web SDK fallback ke Mode Demo:", err);
+          console.warn("Firebase Web SDK gagal diinisialisasi:", err);
         }
+      }
+
+      function formatFirebaseAuthError(err, label) {
+        const code = err?.code || "";
+        if (code === "auth/popup-closed-by-user" || code === "auth/cancelled-popup-request") {
+          return "";
+        }
+        if (code === "auth/operation-not-allowed") {
+          return `Login ${label} belum diaktifkan di Firebase Console (Authentication > Sign-in method > ${label}).`;
+        }
+        if (code === "auth/account-exists-with-different-credential") {
+          return "Email ini sudah terdaftar dengan metode login lain. Gunakan metode masuk yang sama.";
+        }
+        if (code === "auth/unauthorized-domain") {
+          return "Domain web ini belum terdaftar di Authorized Domains Firebase Console.";
+        }
+        if (code.includes("wrong-password") || code.includes("invalid-credential")) {
+          return "Email atau password salah.";
+        }
+        if (code.includes("email-already-in-use")) {
+          return "Email ini sudah terdaftar. Silakan masuk.";
+        }
+        if (code.includes("network-request-failed")) {
+          return "Jaringan gagal. Periksa koneksi internet Anda.";
+        }
+        return err?.message || `Login ${label} gagal.`;
       }
 
       const emailInput = $("#authEmail");
@@ -3233,69 +3235,20 @@
           $("#authModeSwitch").setAttribute("data-mode", mode);
           $$("[data-auth-mode]").forEach(b => b.classList.toggle("is-active", b === btn));
           $("#nameFieldWrap").style.display = mode === "register" ? "block" : "none";
-          $("#pwStrengthWrap").classList.toggle("is-visible", mode === "register" && !state.otpMode);
-          submitBtnText.textContent = state.otpMode ? "Verifikasi Kode OTP" : (mode === "register" ? "Daftar Sekarang" : "Masuk");
+          $("#pwStrengthWrap").classList.toggle("is-visible", mode === "register");
+          submitBtnText.textContent = mode === "register" ? "Daftar Sekarang" : "Masuk";
           setLoginError("");
         });
       });
-
-      // OTP 6 Digit Focus Auto-Advance
-      const otpBoxes = $$(".otp-box");
-      otpBoxes.forEach((box, idx) => {
-        box.addEventListener("input", (e) => {
-          box.value = box.value.replace(/\D/g, "").slice(0, 1);
-          if (box.value && idx < otpBoxes.length - 1) otpBoxes[idx + 1].focus();
-        });
-        box.addEventListener("keydown", (e) => {
-          if (e.key === "Backspace" && !box.value && idx > 0) otpBoxes[idx - 1].focus();
-        });
-        box.addEventListener("paste", (e) => {
-          const pasted = (e.clipboardData || window.clipboardData).getData("text").replace(/\D/g, "").slice(0, 6);
-          if (pasted.length) {
-            e.preventDefault();
-            pasted.split("").forEach((ch, i) => { if (otpBoxes[i]) otpBoxes[i].value = ch; });
-            otpBoxes[Math.min(5, pasted.length - 1)].focus();
-          }
-        });
-      });
-
-      function issueDemoOtp() {
-        const code = String(Math.floor(100000 + Math.random() * 900000));
-        state.generatedOtp = code;
-        showToast("Kode OTP Demo: " + code + " (berlaku 5 menit)", 5500);
-      }
-
-      $("#toggleOtpModeBtn").addEventListener("click", () => {
-        if (!state.otpMode) {
-          const email = emailInput.value.trim();
-          if (!validateEmail(email)) {
-            setLoginError("Masukkan alamat email yang valid terlebih dahulu untuk menerima kode OTP.");
-            return;
-          }
-          state.otpMode = true;
-          $("#passwordFieldWrap").style.display = "none";
-          $("#pwStrengthWrap").classList.remove("is-visible");
-          $("#otpSection").classList.add("is-visible");
-          $("#toggleOtpModeBtn").textContent = "Masuk dengan password";
-          submitBtnText.textContent = "Verifikasi Kode OTP";
-          issueDemoOtp();
-          otpBoxes[0].focus();
-        } else {
-          state.otpMode = false;
-          $("#passwordFieldWrap").style.display = "block";
-          $("#otpSection").classList.remove("is-visible");
-          $("#pwStrengthWrap").classList.toggle("is-visible", state.authMode === "register");
-          $("#toggleOtpModeBtn").textContent = "Masuk dengan OTP";
-          submitBtnText.textContent = state.authMode === "register" ? "Daftar Sekarang" : "Masuk";
-        }
-      });
-
-      $("#resendOtpBtn").addEventListener("click", issueDemoOtp);
 
       $("#forgotPwBtn").addEventListener("click", async () => {
         const email = emailInput.value.trim();
         if (!validateEmail(email)) {
           setLoginError("Masukkan email Anda terlebih dahulu untuk mengirim tautan reset password.");
+          return;
+        }
+        if (isNativeAndroid) {
+          setLoginError("Untuk masuk di perangkat Android, gunakan tombol Lanjut dengan Google atau Lanjut dengan Apple.");
           return;
         }
         if (webFirebaseAuth && webFirebaseMod) {
@@ -3306,7 +3259,7 @@
             setLoginError("Gagal mengirim email reset: " + (e.message || "Periksa koneksi."));
           }
         } else {
-          showToast("Mode Demo: Tautan reset password dikirim ke " + email);
+          setLoginError("Layanan autentikasi belum siap. Periksa koneksi internet Anda.");
         }
       });
 
@@ -3322,7 +3275,10 @@
         if (!btnEl) return;
         btnEl.classList.remove("is-loading", "is-success");
         if (btnEl.dataset.prevHtml) btnEl.innerHTML = btnEl.dataset.prevHtml;
-        submitBtnText.textContent = state.otpMode ? "Verifikasi Kode OTP" : (state.authMode === "register" ? "Daftar Sekarang" : "Masuk");
+        const textEl = $("#submitBtnText");
+        if (textEl) {
+          textEl.textContent = state.authMode === "register" ? "Daftar Sekarang" : "Masuk";
+        }
       }
 
       let activeLoginTriggerBtn = submitBtn;
@@ -3350,7 +3306,7 @@
           displayName: userProfile.displayName || "Pengguna KelasKu",
           email: userProfile.email || "",
           avatarUrl: userProfile.avatarUrl || "",
-          provider: userProfile.provider || "demo",
+          provider: userProfile.provider || "google",
           role: localData.role || userProfile.role || "student",
           notificationsEnabled: localData.notificationsEnabled ?? true
         };
@@ -3399,29 +3355,20 @@
         }, 560);
       }
 
-      // Email / Password / OTP Submit
+      // Email / Password Submit (Firebase Web Auth asli — tanpa mode demo)
       submitBtn.addEventListener("click", async (e) => {
         attachRipple(submitBtn, e.clientX, e.clientY);
         setLoginError("");
-        const email = emailInput.value.trim().toLowerCase();
-        if (!validateEmail(email)) {
-          setLoginError("Format email tidak valid. Contoh: nama@sekolah.id");
+        activeLoginTriggerBtn = submitBtn;
+
+        if (isNativeAndroid) {
+          setLoginError("Silakan masuk menggunakan akun Google atau Apple asli pada tombol di atas.");
           return;
         }
 
-        if (state.otpMode) {
-          const code = otpBoxes.map(b => b.value).join("");
-          if (code.length < 6) {
-            setLoginError("Lengkapi 6 digit kode OTP terlebih dahulu.");
-            return;
-          }
-          if (code !== state.generatedOtp) {
-            setLoginError("Kode OTP salah atau sudah kedaluwarsa.");
-            return;
-          }
-          startAuthButtonMorph(submitBtn);
-          const uid = "demo_" + simpleSha256Fallback(email);
-          await completeLoginFlow({ uid, displayName: email.split("@")[0], email, provider: "otp-demo" }, submitBtn);
+        const email = emailInput.value.trim().toLowerCase();
+        if (!validateEmail(email)) {
+          setLoginError("Format email tidak valid. Contoh: nama@sekolah.id");
           return;
         }
 
@@ -3431,64 +3378,30 @@
           return;
         }
 
-        startAuthButtonMorph(submitBtn);
-
-        if (webFirebaseAuth && webFirebaseMod) {
-          try {
-            if (state.authMode === "register") {
-              const cred = await webFirebaseMod.createUserWithEmailAndPassword(webFirebaseAuth, email, pw);
-              const name = nameInput.value.trim() || email.split("@")[0];
-              await webFirebaseMod.updateProfile(cred.user, { displayName: name });
-              await completeLoginFlow({ uid: cred.user.uid, displayName: name, email, provider: "firebase-web" }, submitBtn, true);
-            } else {
-              const fnEmailSignIn = webFirebaseMod["signInWithEmail" + "AndPassword"];
-              const cred = await fnEmailSignIn(webFirebaseAuth, email, pw);
-              await completeLoginFlow({ uid: cred.user.uid, displayName: cred.user.displayName || email.split("@")[0], email, provider: "firebase-web" }, submitBtn, true);
-            }
-          } catch (err) {
-            resetAuthButtonMorph(submitBtn);
-            const code = err?.code || "";
-            if (code.includes("wrong-password") || code.includes("invalid-credential")) setLoginError("Email atau password salah.");
-            else if (code.includes("email-already-in-use")) setLoginError("Email ini sudah terdaftar. Silakan masuk.");
-            else if (code.includes("network-request-failed")) setLoginError("Jaringan gagal. Periksa koneksi internet Anda.");
-            else setLoginError(err.message || "Gagal memproses autentikasi.");
-          }
+        if (!webFirebaseAuth || !webFirebaseMod) {
+          setLoginError("Layanan Firebase Auth belum siap. Periksa koneksi internet Anda atau masuk via Google / Apple.");
           return;
         }
 
-        // MODE DEMO LOKAL (SHA-256 + localStorage)
-        const usersDb = JSON.parse(localStorage.getItem(LS_USERS_KEY) || "{}");
-        const pwHash = await hashPassword(pw);
-
-        if (state.authMode === "register") {
-          if (usersDb[email]) {
-            resetAuthButtonMorph(submitBtn);
-            setLoginError("Akun dengan email ini sudah terdaftar. Silakan pindah ke tab Masuk.");
-            return;
-          }
-          const displayName = nameInput.value.trim() || email.split("@")[0];
-          const uid = "demo_" + simpleSha256Fallback(email);
-          usersDb[email] = { uid, displayName, email, pwHash };
-          localStorage.setItem(LS_USERS_KEY, JSON.stringify(usersDb));
-          await completeLoginFlow({ uid, displayName, email, provider: "demo" }, submitBtn);
-        } else {
-          if (!usersDb[email]) {
-            // Auto-demo convenience jika pakai email baru atau password salah
-            const displayName = email.split("@")[0];
-            const uid = "demo_" + simpleSha256Fallback(email);
-            usersDb[email] = { uid, displayName, email, pwHash };
-            localStorage.setItem(LS_USERS_KEY, JSON.stringify(usersDb));
-            await completeLoginFlow({ uid, displayName, email, provider: "demo" }, submitBtn);
-          } else if (usersDb[email].pwHash !== pwHash) {
-            resetAuthButtonMorph(submitBtn);
-            setLoginError("Password salah. Silakan coba lagi atau gunakan Lupa password.");
+        startAuthButtonMorph(submitBtn);
+        try {
+          if (state.authMode === "register") {
+            const cred = await webFirebaseMod.createUserWithEmailAndPassword(webFirebaseAuth, email, pw);
+            const name = nameInput.value.trim() || email.split("@")[0];
+            await webFirebaseMod.updateProfile(cred.user, { displayName: name });
+            await completeLoginFlow({ uid: cred.user.uid, displayName: name, email, provider: "firebase-web" }, submitBtn, true);
           } else {
-            await completeLoginFlow({ uid: usersDb[email].uid, displayName: usersDb[email].displayName, email, provider: "demo" }, submitBtn);
+            const fnEmailSignIn = webFirebaseMod["signInWithEmail" + "AndPassword"];
+            const cred = await fnEmailSignIn(webFirebaseAuth, email, pw);
+            await completeLoginFlow({ uid: cred.user.uid, displayName: cred.user.displayName || email.split("@")[0], email, provider: "firebase-web" }, submitBtn, true);
           }
+        } catch (err) {
+          resetAuthButtonMorph(submitBtn);
+          setLoginError(formatFirebaseAuthError(err, "Email"));
         }
       });
 
-      // Google & Apple Sign-In
+      // Google & Apple Sign-In Asli (Android Native Bridge & Web Firebase Auth)
       $("#btnGoogle").addEventListener("click", async (e) => {
         const btn = $("#btnGoogle");
         attachRipple(btn, e.clientX, e.clientY);
@@ -3503,97 +3416,107 @@
         }
 
         if (webFirebaseAuth && webFirebaseMod) {
+          startAuthButtonMorph(btn);
+          const provider = new webFirebaseMod.GoogleAuthProvider();
+          provider.setCustomParameters({ prompt: "select_account" });
           try {
-            startAuthButtonMorph(btn);
-            const provider = new webFirebaseMod.GoogleAuthProvider();
             const cred = await webFirebaseMod.signInWithPopup(webFirebaseAuth, provider);
             await completeLoginFlow({
               uid: cred.user.uid,
               displayName: cred.user.displayName || "Pengguna Google",
               email: cred.user.email || "",
               avatarUrl: cred.user.photoURL || "",
-              provider: "firebase-web"
+              provider: "google"
             }, btn, true);
           } catch (err) {
+            if (err?.code === "auth/popup-blocked") {
+              try {
+                await webFirebaseMod.signInWithRedirect(webFirebaseAuth, provider);
+                return;
+              } catch (redirErr) {
+                resetAuthButtonMorph(btn);
+                setLoginError(formatFirebaseAuthError(redirErr, "Google"));
+                return;
+              }
+            }
             resetAuthButtonMorph(btn);
-            setLoginError("Login Google dibatalkan atau gagal: " + (err.message || ""));
+            const msg = formatFirebaseAuthError(err, "Google");
+            if (msg) setLoginError(msg);
+            else showToast("Login Google dibatalkan.");
           }
           return;
         }
 
-        openDemoAccountPicker("Google", btn);
+        setLoginError("Autentikasi Google belum siap. Periksa koneksi internet Anda lalu coba lagi.");
       });
 
       $("#btnApple").addEventListener("click", async (e) => {
         const btn = $("#btnApple");
         attachRipple(btn, e.clientX, e.clientY);
         setLoginError("");
+        activeLoginTriggerBtn = btn;
+
+        if (isNativeAndroid && window.KelasKuBridge && typeof window.KelasKuBridge.signInWithApple === "function") {
+          startAuthButtonMorph(btn);
+          const seed = JSON.stringify(createSeedData());
+          window.KelasKuBridge.signInWithApple(seed);
+          return;
+        }
+
         if (webFirebaseAuth && webFirebaseMod) {
+          startAuthButtonMorph(btn);
+          const provider = new webFirebaseMod.OAuthProvider("apple.com");
+          provider.addScope("email");
+          provider.addScope("name");
+          provider.setCustomParameters({ locale: "id" });
           try {
-            startAuthButtonMorph(btn);
-            const provider = new webFirebaseMod.OAuthProvider("apple.com");
             const cred = await webFirebaseMod.signInWithPopup(webFirebaseAuth, provider);
             await completeLoginFlow({
               uid: cred.user.uid,
-              displayName: cred.user.displayName || "Pengguna Apple",
+              displayName: cred.user.displayName || cred.user.email?.split("@")[0] || "Pengguna Apple",
               email: cred.user.email || "",
-              provider: "firebase-web"
+              avatarUrl: cred.user.photoURL || "",
+              provider: "apple"
             }, btn, true);
           } catch (err) {
+            if (err?.code === "auth/popup-blocked") {
+              try {
+                await webFirebaseMod.signInWithRedirect(webFirebaseAuth, provider);
+                return;
+              } catch (redirErr) {
+                resetAuthButtonMorph(btn);
+                setLoginError(formatFirebaseAuthError(redirErr, "Apple"));
+                return;
+              }
+            }
             resetAuthButtonMorph(btn);
-            setLoginError("Login Apple gagal: " + (err.message || ""));
+            const msg = formatFirebaseAuthError(err, "Apple");
+            if (msg) setLoginError(msg);
+            else showToast("Login Apple dibatalkan.");
           }
           return;
         }
-        openDemoAccountPicker("Apple", btn);
-      });
 
-      function openDemoAccountPicker(providerLabel, triggerBtn) {
-        const demoAccounts = [
-          { uid: "demo_siswa_nadia", displayName: "Nadia Putri (Siswa)", email: "nadia.siswa@kelasku.id", role: "student" },
-          { uid: "demo_pengajar_budi", displayName: "Dr. Budi Santoso (Pengajar)", email: "budi.dosen@kelasku.id", role: "teacher" }
-        ];
-        openSheet(`
-          <div class="sheet-title">Pilih Akun ${providerLabel} (Mode Demo)</div>
-          <p style="font-size:12.5px; color:rgba(15,31,77,0.7); margin-bottom:14px;">Pilih akun simulasi untuk mencoba seluruh fitur dan animasi KelasKu secara instan.</p>
-          ${demoAccounts.map((acc, i) => `
-            <button type="button" class="profile-row" style="width:100%; text-align:left;" data-demo-pick="${i}">
-              <div style="display:flex; align-items:center; gap:12px;">
-                <div class="avatar-btn" style="width:40px; height:40px;">${acc.displayName[0]}</div>
-                <div>
-                  <div style="font-size:14px; font-weight:800; color:var(--navy-text);">${acc.displayName}</div>
-                  <div style="font-size:12px; color:rgba(15,31,77,0.65);">${acc.email}</div>
-                </div>
-              </div>
-              <span style="font-size:12px; font-weight:800; color:var(--blue);">Pilih</span>
-            </button>
-          `).join("")}
-        `);
-        $$("[data-demo-pick]").forEach(el => {
-          el.addEventListener("click", () => {
-            const acc = demoAccounts[Number(el.getAttribute("data-demo-pick"))];
-            closeSheet();
-            completeLoginFlow({ ...acc, provider: providerLabel.toLowerCase() + "-demo" }, triggerBtn);
-          });
-        });
-      }
+        setLoginError("Autentikasi Apple belum siap. Periksa koneksi internet Anda lalu coba lagi.");
+      });
 
       // Native Android Bridge Callbacks
       window.onNativeAuthSuccess = function (userJsonStr) {
         try {
           const u = JSON.parse(userJsonStr);
           if (!state.user || state.user.uid !== u.uid) {
-            completeLoginFlow(u, activeLoginTriggerBtn, true);
+            const btn = u.provider === "apple" ? $("#btnApple") : (activeLoginTriggerBtn || $("#btnGoogle"));
+            completeLoginFlow(u, btn, true);
           }
         } catch (_) {}
       };
       window.onNativeAuthError = function (msg) {
         resetAuthButtonMorph(activeLoginTriggerBtn);
-        setLoginError(msg || "Gagal masuk dengan Google.");
+        setLoginError(msg || "Gagal masuk dengan akun.");
       };
       window.onNativeAuthCancelled = function () {
         resetAuthButtonMorph(activeLoginTriggerBtn);
-        showToast("Login Google dibatalkan.");
+        showToast("Login dibatalkan.");
       };
       window.onFirestoreDataSync = function (stateJsonStr) {
         try {
@@ -3606,7 +3529,7 @@
           state.user.avatarUrl = data.profile.avatarUrl || state.user.avatarUrl || "";
           state.user.role = data.profile.role || "student";
           state.user.notificationsEnabled = data.profile.notificationsEnabled ?? true;
-          state.user.provider = "google";
+          state.user.provider = data.profile.provider || state.user.provider || "google";
           if (Array.isArray(data.assignments) && data.assignments.length) state.assignments = data.assignments;
           if (Array.isArray(data.events) && data.events.length) state.events = data.events;
           if (Array.isArray(data.materials) && data.materials.length) state.materials = data.materials;
@@ -4961,7 +4884,7 @@
         $("#btnLogout").addEventListener("click", async () => {
           closeSheet();
           $("#appShell").classList.add("is-logging-out");
-          if (isNativeAndroid && state.user?.provider === "google" && window.KelasKuBridge) {
+          if (isNativeAndroid && isNativeProvider(state.user?.provider) && window.KelasKuBridge) {
             window.KelasKuBridge.signOut();
             return;
           }
@@ -5039,29 +4962,22 @@
         }
         initOptionalWebFirebase();
 
-        // Cek apakah sudah ada sesi tersimpan (mode demo)
-        let savedSession = null;
+        // Bersihkan sesi demo lama jika masih tersisa di localStorage
         try {
           const raw = localStorage.getItem(LS_SESSION_KEY);
-          if (raw) savedSession = JSON.parse(raw);
-        } catch (_) {}
+          if (raw) {
+            const parsed = JSON.parse(raw);
+            if (!parsed?.provider || String(parsed.provider).includes("demo")) {
+              localStorage.removeItem(LS_SESSION_KEY);
+            }
+          }
+        } catch (_) {
+          localStorage.removeItem(LS_SESSION_KEY);
+        }
 
         setTimeout(() => {
           $("#splashScreen").classList.add("is-leaving");
           setTimeout(() => { $("#splashScreen").style.display = "none"; }, 480);
-
-          if (savedSession && savedSession.uid && savedSession.provider !== "google") {
-            const localData = loadUserDataLocal(savedSession.uid);
-            state.user = savedSession;
-            state.assignments = localData.assignments;
-            state.events = localData.events;
-            state.materials = localData.materials;
-            state.conversations = localData.conversations;
-            $("#loginScreen").classList.add("is-hidden");
-            $("#appShell").classList.add("is-active");
-            renderAllScreens();
-            triggerCalendarWave();
-          }
         }, 1150);
       })();
     })();

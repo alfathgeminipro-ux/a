@@ -44,7 +44,9 @@ import androidx.credentials.CredentialManager
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.auth.attemptAutoSignIn
 import com.example.auth.authStateFlow
+import com.example.auth.onAppleSignInClicked
 import com.example.auth.onGoogleSignInClicked
+import com.example.auth.resolveUserProvider
 import com.example.auth.signOutGoogle
 import com.example.data.KelasKuRepository
 import com.example.notifications.AssignmentReminderHelper
@@ -221,7 +223,7 @@ fun KelasKuAppRoot(
                     put("displayName", activeUser.displayName ?: "Pengguna KelasKu")
                     put("email", activeUser.email ?: "user@kelasku.id")
                     put("avatarUrl", activeUser.photoUrl?.toString() ?: "")
-                    put("provider", "google")
+                    put("provider", resolveUserProvider(activeUser))
                 }
                 pushToWeb("window.onNativeAuthSuccess && window.onNativeAuthSuccess(${JSONObject.quote(userObj.toString())});")
 
@@ -268,7 +270,30 @@ fun KelasKuAppRoot(
                             put("displayName", user.displayName ?: "Pengguna KelasKu")
                             put("email", user.email ?: "user@kelasku.id")
                             put("avatarUrl", user.photoUrl?.toString() ?: "")
-                            put("provider", "google")
+                            put("provider", resolveUserProvider(user))
+                        }
+                        pushToWeb("window.onNativeAuthSuccess && window.onNativeAuthSuccess(${JSONObject.quote(userObj.toString())});")
+                    },
+                    onAuthError = { msg ->
+                        pushToWeb("window.onNativeAuthError && window.onNativeAuthError(${JSONObject.quote(msg)});")
+                    },
+                    scope = scope,
+                    onAuthCancelled = {
+                        pushToWeb("window.onNativeAuthCancelled && window.onNativeAuthCancelled();")
+                    }
+                )
+            },
+            onRequestAppleSignIn = { seedJson ->
+                pendingSeedJson = seedJson
+                onAppleSignInClicked(
+                    context = context,
+                    onAuthSuccess = { user: FirebaseUser ->
+                        val userObj = JSONObject().apply {
+                            put("uid", user.uid)
+                            put("displayName", user.displayName ?: "Pengguna KelasKu")
+                            put("email", user.email ?: "user@kelasku.id")
+                            put("avatarUrl", user.photoUrl?.toString() ?: "")
+                            put("provider", resolveUserProvider(user))
                         }
                         pushToWeb("window.onNativeAuthSuccess && window.onNativeAuthSuccess(${JSONObject.quote(userObj.toString())});")
                     },
@@ -458,6 +483,7 @@ private fun createKelasKuWebView(
 
 private class KelasKuJsBridge(
     private val onRequestGoogleSignIn: (String) -> Unit,
+    private val onRequestAppleSignIn: (String) -> Unit,
     private val onRequestSignOut: () -> Unit,
     private val repository: KelasKuRepository,
     private val scope: CoroutineScope,
@@ -483,6 +509,11 @@ private class KelasKuJsBridge(
     @JavascriptInterface
     fun signInWithGoogle(seedJson: String) {
         onRequestGoogleSignIn(seedJson)
+    }
+
+    @JavascriptInterface
+    fun signInWithApple(seedJson: String) {
+        onRequestAppleSignIn(seedJson)
     }
 
     @JavascriptInterface
